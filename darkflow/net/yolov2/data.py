@@ -1,7 +1,7 @@
 from ...utils.pascal_voc_clean_xml import pascal_voc_clean_xml
 from numpy.random import permutation as perm
 from ..yolo.predict import preprocess
-from ..yolo.data import shuffle
+from ..yolo.data import shuffle, shuffle_test
 from copy import deepcopy
 import pickle
 import numpy as np
@@ -23,7 +23,8 @@ def _batch(self, chunk):
     # preprocess
     jpg = chunk[0]; w, h, allobj_ = chunk[1]
     allobj = deepcopy(allobj_)
-    path = os.path.join(self.FLAGS.dataset, jpg)
+    path = jpg #os.path.join(self.FLAGS.dataset, jpg)
+    print('process image: ', jpg)
     img = self.preprocess(path, allobj)
 
     # Calculate regression target

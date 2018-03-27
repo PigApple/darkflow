@@ -28,6 +28,7 @@ class TFNet(object):
 	train = flow.train
 	camera = help.camera
 	predict = flow.predict
+	predict_more = flow.predict_more
 	return_predict = flow.return_predict
 	to_darknet = help.to_darknet
 	build_train_op = help.build_train_op
@@ -67,15 +68,17 @@ class TFNet(object):
 
 		self.say('\nBuilding net ...')
 		start = time.time()
-		self.graph = tf.Graph()
-		device_name = FLAGS.gpuName \
-			if FLAGS.gpu > 0.0 else None
-		with tf.device(device_name):
+		if self.FLAGS.distributed == True:
 			with self.graph.as_default() as g:
-				self.build_forward()
-				self.setup_meta_ops()
-		self.say('Finished in {}s\n'.format(
-			time.time() - start))
+			    self.build_forward()
+		else: 
+			self.graph = tf.Graph()
+			device_name = FLAGS.gpuName if FLAGS.gpu > 0.0 else None
+			with tf.device(device_name):
+				with self.graph.as_default() as g:
+					self.build_forward()
+					self.setup_meta_ops()
+		self.say('Finished in {}s\n'.format(time.time() - start))
 	
 	def build_from_pb(self):
 		with tf.gfile.FastGFile(self.FLAGS.pbLoad, "rb") as f:

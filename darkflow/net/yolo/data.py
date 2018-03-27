@@ -1,4 +1,4 @@
-from ...utils.pascal_voc_clean_xml import pascal_voc_clean_xml
+from ...utils.pascal_voc_clean_xml import pascal_voc_clean_xml, parse_xml_annotations
 from numpy.random import permutation as perm
 from .predict import preprocess
 # from .misc import show
@@ -11,11 +11,23 @@ def parse(self, exclusive = False):
     meta = self.meta
     ext = '.parsed'
     ann = self.FLAGS.annotation
+
     if not os.path.isdir(ann):
         msg = 'Annotation directory not found {} .'
         exit('Error: {}'.format(msg.format(ann)))
+                
+    if self.FLAGS.get('isTextDataSet', False):
+        #ann = os.path.join(FLAGS.dataPath, 'Annotations')
+        annFiles = [os.path.join(ann, l.rstrip('\n') + '.xml') for l in open(self.FLAGS.trainSet,'r').readlines()]
+        
+    else:
+        annFiles = [f for f in glob.iglob(ann + '/*.xml')] 
+
+    
     print('\n{} parsing {}'.format(meta['model'], ann))
-    dumps = pascal_voc_clean_xml(ann, meta['labels'], exclusive)
+    dumps = parse_xml_annotations(annFiles, self.FLAGS.dataset, meta['labels'], exclusive)
+    
+    #dumps = pascal_voc_clean_xml(ann, meta['labels'], exclusive)
     return dumps
 
 
@@ -32,7 +44,7 @@ def _batch(self, chunk):
     # preprocess
     jpg = chunk[0]; w, h, allobj_ = chunk[1]
     allobj = deepcopy(allobj_)
-    path = os.path.join(self.FLAGS.dataset, jpg)
+    path = jpg #os.path.join(self.FLAGS.dataset, jpg)
     img = self.preprocess(path, allobj)
 
     # Calculate regression target
@@ -128,3 +140,44 @@ def shuffle(self):
         
         print('Finish {} epoch(es)'.format(i + 1))
 
+
+def shuffle_test(self):
+    batch = self.FLAGS.batch
+    
+    #data = self.parse()
+    meta = self.meta
+    annFiles = [os.path.join(self.FLAGS.annotation, l.rstrip('\n') + '.xml') for l in open(self.FLAGS.testSet,'r').readlines()]
+    data = parse_xml_annotations(annFiles, self.FLAGS.dataset, meta['labels'])
+    
+    size = len(data)
+
+    print('Dataset of {} instance(s)'.format(size))
+    if batch > size: self.FLAGS.batch = batch = size
+    batch_per_epoch = int(size / batch)
+
+    for i in range(self.FLAGS.epoch):
+        shuffle_idx = perm(np.arange(size))
+        for b in range(batch_per_epoch):
+            # yield these
+            x_batch = list()
+            feed_batch = dict()
+
+            for j in range(b*batch, b*batch+batch):
+                train_instance = data[shuffle_idx[j]]
+                inp, new_feed = self._batch(train_instance)
+
+                if inp is None: continue
+                x_batch += [np.expand_dims(inp, 0)]
+
+                for key in new_feed:
+                    new = new_feed[key]
+                    old_feed = feed_batch.get(key, 
+                        np.zeros((0,) + new.shape))
+                    feed_batch[key] = np.concatenate([ 
+                        old_feed, [new] 
+                    ])      
+            
+            x_batch = np.concatenate(x_batch, 0)
+            yield x_batch, feed_batch
+        
+        print('Finish {} epoch(es)'.format(i + 1))

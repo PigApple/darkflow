@@ -4,6 +4,7 @@ import numpy as np
 import tensorflow as tf
 import pickle
 from multiprocessing.pool import ThreadPool
+import cv2
 
 train_stats = (
     'Training statistics: \n'
@@ -97,6 +98,62 @@ def return_predict(self, im):
     return boxesInfo
 
 import math
+
+def predict_more(self, input_imgs):
+    #inp_path = self.FLAGS.imgdir
+    all_inps = input_imgs #os.listdir(inp_path)
+    all_inps = [i for i in all_inps if self.framework.is_inp(i)]
+    if not all_inps:
+        msg = 'Failed to find any images in {} .'
+        exit('Error: {}'.format(msg.format(all_inps)))
+
+    img_list = list()
+    predictions = list()
+    
+    batch = min(self.FLAGS.batch, len(all_inps))
+
+    # predict in batches
+    n_batch = int(math.ceil(len(all_inps) / batch))
+    for j in range(n_batch):
+        from_idx = j * batch
+        to_idx = min(from_idx + batch, len(all_inps))
+
+        # collect images input in the batch
+        inp_feed = list(); new_all = list()
+        this_batch = all_inps[from_idx:to_idx]
+        for inp in this_batch:
+            new_all += [inp]
+            #this_inp = os.path.join(inp_path, inp)
+            this_inp = self.framework.preprocess(inp)
+            expanded = np.expand_dims(this_inp, 0)
+            inp_feed.append(expanded)
+        this_batch = new_all
+
+        # Feed to the net
+        feed_dict = {self.inp : np.concatenate(inp_feed, 0)}    
+        self.say('Forwarding {} inputs ...'.format(len(inp_feed)))
+        start = time.time()
+        out = self.sess.run(self.out, feed_dict)
+        stop = time.time(); last = stop - start
+        self.say('Total time = {}s / {} inps = {} ips'.format(
+            last, len(inp_feed), len(inp_feed) / last))
+        
+        
+        for index, single_out in enumerate(out):
+            img_list.append(this_batch[index])
+            h, w,_ = cv2.imread(this_batch[index]).shape
+            boxes = self.framework.findboxes(single_out)
+            threshold = self.FLAGS.threshold
+            boxesInfo = list()
+            for box in boxes:
+                tmpBox = self.framework.process_box(box, h, w, threshold)
+                if tmpBox is None:
+                    continue
+                
+                boxesInfo.append([tmpBox[0], tmpBox[2], tmpBox[1], tmpBox[3], tmpBox[6], tmpBox[4]])
+            predictions.append(boxesInfo)        
+            
+    return img_list, predictions   
 
 def predict(self):
     inp_path = self.FLAGS.imgdir
